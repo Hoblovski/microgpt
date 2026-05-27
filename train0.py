@@ -58,8 +58,9 @@ for step in range(num_steps):
         loss_t = -math.log(probs[target_id])
         losses.append(loss_t)
     # Loss(t, θ) = (1/n) * Σ_{i=0}^{n-1} -log P(t_{i+1} | t_i, θ)
-    # where θ = state_dict (bigram count table with Laplace smoothing),
-    # P(j | i, θ) = (θ[i][j] + 1) / (Σ_k θ[i][k] + V)
+    # where t = (t_0, t_1, ..., t_n) is the token sequence (t_0 = t_n = BOS),
+    #       θ = state_dict (bigram count table with Laplace smoothing),
+    #       P(j | i, θ) = (θ[i][j] + 1) / (Σ_k θ[i][k] + V)
     loss = (1 / n) * sum(losses)
 
     # Update the model: incorporate this document's bigram counts

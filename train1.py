@@ -115,7 +115,7 @@ def analytic_gradient(tokens, n):
         # forward pass (saving intermediates for backward)
         x = list(state_dict['wte'][token_id])
         h_pre = linear(x, state_dict['mlp_fc1'])
-        h = [max(0, v) for v in h_pre]
+        h = [max(0, v) for v in h_pre]  # relu
         logits = linear(h, state_dict['mlp_fc2'])
         probs = softmax(logits)
         loss_t = -math.log(probs[target_id])

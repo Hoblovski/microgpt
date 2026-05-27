@@ -1,0 +1,140 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{hyperref}
+
+\title{analytic\_gradient 数学推导}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{微积分基础回顾}
+
+\subsection{链式法则（Chain Rule）}
+
+若 $z = f(y)$，$y = g(x)$，则：
+\[
+\frac{dz}{dx} = \frac{dz}{dy} \cdot \frac{dy}{dx}
+\]
+
+多元情况：若 $L = f(\mathbf{y})$，$\mathbf{y} = g(\mathbf{x})$，则对每个 $x_i$：
+\[
+\frac{\partial L}{\partial x_i} = \sum_j \frac{\partial L}{\partial y_j} \cdot \frac{\partial y_j}{\partial x_i}
+\]
+
+这就是反向传播的核心——从输出端逐层往回乘梯度。
+
+\subsection{常用导数}
+
+\begin{itemize}
+    \item $\displaystyle \frac{d}{dx} \log x = \frac{1}{x}$，更一般地 $\displaystyle \frac{d}{dx} \log f(x) = \frac{f'(x)}{f(x)}$
+    \item $\displaystyle \frac{d}{dx} e^x = e^x$
+    \item $\displaystyle \frac{d}{dx} \max(0, x) = \begin{cases} 1 & x > 0 \\ 0 & x < 0 \end{cases}$（ReLU 在 $x=0$ 处不可导，实践中取 0）
+    \item 线性变换 $\mathbf{y} = W\mathbf{x}$：$\displaystyle \frac{\partial y_i}{\partial x_j} = W[i,j]$，$\displaystyle \frac{\partial y_i}{\partial W[i,j]} = x_j$
+\end{itemize}
+
+\subsection{Softmax + 交叉熵的梯度（重要结论）}
+
+设 $\text{probs} = \text{softmax}(\text{logits})$，$\ell = -\log(\text{probs}[y])$，则：
+\[
+\frac{\partial \ell}{\partial \text{logits}[k]} = \text{probs}[k] - \mathbf{1}[k = y]
+\]
+
+推导思路：对 $k = y$ 和 $k \neq y$ 分别求导，利用 $\frac{\partial \text{probs}[k]}{\partial \text{logits}[j]} = \text{probs}[k](\delta_{kj} - \text{probs}[j])$，代入链式法则化简即得。这个结论在代码中直接使用，不需要每次重新推导。
+
+\subsection{求和符号的梯度}
+
+若 $L = \frac{1}{n}\sum_{i=0}^{n-1} \ell_i$，则 $\displaystyle \frac{\partial L}{\partial \theta} = \frac{1}{n}\sum_{i=0}^{n-1} \frac{\partial \ell_i}{\partial \theta}$。
+
+代码中把 $\frac{1}{n}$ 乘在 \texttt{dlogits} 里，然后每个位置的梯度直接 \texttt{+=} 累加，等价于先求和再除以 $n$。
+
+\section{模型结构（单个位置 $i$）}
+
+给定 token 序列 $\mathbf{t} = (t_0, t_1, \dots, t_n)$，其中 $t_0 = t_n = \text{BOS}$。对每个位置 $i$，令 $y = t_{i+1}$ 为 target：
+
+\begin{align*}
+x &= \text{wte}[t_i] \in \mathbb{R}^{d} \\
+h_{\text{pre}} &= W_1 x \in \mathbb{R}^{4d} \\
+h &= \text{ReLU}(h_{\text{pre}}) \\
+\text{logits} &= W_2 h \in \mathbb{R}^{V} \\
+\text{probs} &= \text{softmax}(\text{logits}) \\
+\ell_i &= -\log(\text{probs}[y])
+\end{align*}
+
+其中 $d = n\_embd$，$V = vocab\_size$，$W_1 = mlp\_fc1$，$W_2 = mlp\_fc2$。
+
+\section{Loss}
+
+参数 $\theta = \{W_1, W_2, \text{wte}\}$，token 序列 $\mathbf{t}$：
+\[
+\text{Loss}(\mathbf{t}, \theta) = \frac{1}{n} \sum_{i=0}^{n-1} \ell_i
+\]
+
+\section{反向传播（链式法则）}
+
+\subsection{$\dfrac{\partial \ell_i}{\partial \text{logits}}$（softmax + 交叉熵）}
+
+\[
+\frac{\partial \ell_i}{\partial \text{logits}[k]} = \text{probs}[k] - \mathbf{1}[k = y]
+\]
+
+\[
+\frac{\partial \text{Loss}}{\partial \text{logits}[k]} = \frac{1}{n}\Big(\text{probs}[k] - \mathbf{1}[k = y]\Big)
+\]
+
+\subsection{$\dfrac{\partial \text{Loss}}{\partial W_2}$（$\text{logits} = W_2 h$）}
+
+由 $\text{logits}[k] = \sum_j W_2[k,j] \cdot h[j]$，$\frac{\partial \text{logits}[k]}{\partial W_2[k,j]} = h[j]$：
+\[
+\frac{\partial \text{Loss}}{\partial W_2[k, j]} = \frac{\partial \text{Loss}}{\partial \text{logits}[k]} \cdot h[j]
+\]
+
+\subsection{$\dfrac{\partial \text{Loss}}{\partial h}$（$W_2^T \cdot d\text{logits}$）}
+
+由 $\text{logits}[k] = \sum_j W_2[k,j] \cdot h[j]$，$\frac{\partial \text{logits}[k]}{\partial h[j]} = W_2[k,j]$：
+\[
+\frac{\partial \text{Loss}}{\partial h[j]} = \sum_{k=0}^{V-1} W_2[k, j] \cdot \frac{\partial \text{Loss}}{\partial \text{logits}[k]}
+\]
+
+\subsection{$\dfrac{\partial \text{Loss}}{\partial h_{\text{pre}}}$（ReLU 反向）}
+
+$h[j] = \max(0, h_{\text{pre}}[j])$，$\frac{\partial h[j]}{\partial h_{\text{pre}}[j]} = \mathbf{1}[h_{\text{pre}}[j] > 0]$：
+\[
+\frac{\partial \text{Loss}}{\partial h_{\text{pre}}[j]} = \frac{\partial \text{Loss}}{\partial h[j]} \cdot \mathbf{1}[h_{\text{pre}}[j] > 0]
+\]
+
+\subsection{$\dfrac{\partial \text{Loss}}{\partial W_1}$（$h_{\text{pre}} = W_1 x$）}
+
+由 $h_{\text{pre}}[j] = \sum_k W_1[j,k] \cdot x[k]$，$\frac{\partial h_{\text{pre}}[j]}{\partial W_1[j,k]} = x[k]$：
+\[
+\frac{\partial \text{Loss}}{\partial W_1[j, k]} = \frac{\partial \text{Loss}}{\partial h_{\text{pre}}[j]} \cdot x[k]
+\]
+
+\subsection{$\dfrac{\partial \text{Loss}}{\partial x}$（$W_1^T \cdot dh_{\text{pre}}$）}
+
+由 $h_{\text{pre}}[j] = \sum_k W_1[j,k] \cdot x[k]$，$\frac{\partial h_{\text{pre}}[j]}{\partial x[k]} = W_1[j,k]$：
+\[
+\frac{\partial \text{Loss}}{\partial x[k]} = \sum_{j=0}^{4d-1} W_1[j, k] \cdot \frac{\partial \text{Loss}}{\partial h_{\text{pre}}[j]}
+\]
+
+\subsection{$\dfrac{\partial \text{Loss}}{\partial \text{wte}[t_i]}$（$x = \text{wte}[t_i]$）}
+
+$x[k] = \text{wte}[t_i][k]$，$\frac{\partial x[k]}{\partial \text{wte}[t_i][k]} = 1$：
+\[
+\frac{\partial \text{Loss}}{\partial \text{wte}[t_i][k]} = \frac{\partial \text{Loss}}{\partial x[k]}
+\]
+
+\section{最终梯度（累加所有位置）}
+
+对每个参数 $\theta_p \in \theta$：
+\[
+\frac{\partial \text{Loss}}{\partial \theta_p} = \sum_{i=0}^{n-1} \frac{\partial \ell_i}{\partial \theta_p} \cdot \frac{1}{n}
+\]
+
+代码中通过 \texttt{+=} 累加每个位置的梯度，最后除以 $n$ 体现在第 1 步的 \texttt{dlogits} 里已经乘了 $1/n$。
+
+\end{document}
