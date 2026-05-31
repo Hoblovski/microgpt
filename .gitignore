@@ -3,3 +3,9 @@ __pycache__
 *.aux
 *.dvi
 *.log
+
+# DDPM 训练产物
+*.npz
+*.npz.tmp
+*.pgm
+optdigits.*
