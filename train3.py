@@ -113,23 +113,36 @@ def rmsnorm(x):
     scale = (ms + 1e-5) ** -0.5
     return [xi * scale for xi in x]
 
+from play import assertshape
 def gpt(token_id, pos_id, keys, values):
+    # token_id: scalar
     tok_emb = state_dict['wte'][token_id]
     pos_emb = state_dict['wpe'][pos_id]
+    assertshape(tok_emb, [n_embd])
     x = [t + p for t, p in zip(tok_emb, pos_emb)]
     x = rmsnorm(x)
     # 1) Single-head attention block
     x_residual = x
-    x = rmsnorm(x)
+    x = rmsnorm(x) # this is extra
+    assertshape(x, [n_embd])
     q = linear(x, state_dict['attn_wq'])
+    assertshape(q, [n_embd])
     k = linear(x, state_dict['attn_wk'])
+    assertshape(k, [n_embd])
     v = linear(x, state_dict['attn_wv'])
+    assertshape(v, [n_embd])
     keys.append(k)
     values.append(v)
+    assertshape(keys, [pos_id + 1, n_embd])
+    assertshape(values, [pos_id + 1, n_embd])
+    # matmul(Q, K^T)
     attn_logits = [sum(q[j] * keys[t][j] for j in range(n_embd)) / n_embd**0.5 for t in range(len(keys))]
     attn_weights = softmax(attn_logits)
+    assertshape(attn_weights, [pos_id + 1])
     x_attn = [sum(attn_weights[t] * values[t][j] for t in range(len(values))) for j in range(n_embd)]
+    assertshape(x_attn, [n_embd])
     x = linear(x_attn, state_dict['attn_wo'])
+    assertshape(x, [n_embd])
     x = [a + b for a, b in zip(x, x_residual)]
     # 2) MLP block
     x_residual = x
