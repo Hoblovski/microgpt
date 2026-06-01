@@ -9,3 +9,11 @@ __pycache__
 *.npz.tmp
 *.pgm
 optdigits.*
+
+# PyTorch 训练产物
+checkpoints/
+learn-pytorch/data/
+learn-pytorch/checkpoints/
+learn-pytorch/*.pth
+ddpm_samples*.png
+samples/

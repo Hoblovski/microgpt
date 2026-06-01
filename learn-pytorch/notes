@@ -1,0 +1,26 @@
+API ref
+
+	import os
+	import torch
+	from torch import nn
+	from torch.utils.data import DataLoader
+	from torchvision import datasets, transforms
+
+	torch. ones, zeros, rand, randn
+	nn.Linear, ReLu, Softmax, Sequential
+		其实是函数式的 nn.Relu()(val)
+
+如何 grad:
+	w = torch.randn(5, 3, requires_grad=True)
+	b = torch.randn(3, requires_grad=True)
+	...
+	loss = torch.nn.functional.binary_cross_entropy_with_logits(z, y)
+	loss.backward()
+	print(w.grad)
+	print(b.grad)
+
+	可以暂时关掉 autograd 如果只需要 fw 计算，加速
+	with torch.no_grad():
+	    z = torch.matmul(x, w)+b
+
+扩散是马尔科夫过程，所以才能 P(X_{0:T}) = P(X_T) \prod P(X_{i-1}|X_i)
